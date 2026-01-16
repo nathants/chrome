@@ -29,10 +29,15 @@ type stepArgs struct {
 func (stepArgs) Description() string {
 	return `step - Run an action and capture the result
 
+Step is a wrapper that: (1) runs any chrome action, then (2) takes a screenshot.
+The --output-dir flag controls where step saves its screenshot, NOT the action.
+Actions like clicktext, type, etc. don't take screenshots themselves.
+
 Examples:
   chrome step navigate https://localhost:3000
   chrome step -t http://localhost:3000 click "button.submit"
-  chrome step type "#name" "Alice"`
+  chrome step type "#name" "Alice"
+  chrome step --output-dir /tmp/shots clicktext "Login"   # screenshot saved to /tmp/shots/`
 }
 
 type parsedStep struct {

@@ -78,7 +78,10 @@ func usage() {
 	}
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Note: For multi-step automation, use external Chrome on port 9222 to maintain state between commands.")
-	fmt.Fprintln(os.Stderr, "Workflow tip: 'chrome step <command>' runs an action and captures a screenshot.")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Workflow tip: 'chrome step <action>' wraps any action with a screenshot.")
+	fmt.Fprintln(os.Stderr, "  Step runs the action, then takes its own screenshot. Flags like --output-dir")
+	fmt.Fprintln(os.Stderr, "  control where step saves its screenshot, not the action itself.")
 }
 
 func main() {
