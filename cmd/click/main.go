@@ -26,10 +26,18 @@ func (clickArgs) Description() string {
 Uses Chrome DevTools Protocol to send a real mouse click to an element.
 This properly triggers React event handlers and works with canvas elements.
 
-Example:
-  chrome click "button#submit"
-  chrome click ".object-button:nth-child(2)"
-  chrome click "canvas"`
+IMPORTANT: This command requires a CSS selector, not text content.
+To click by visible text, use 'clicktext' instead.
+
+Valid CSS selectors:
+  chrome click "button#submit"           # by id
+  chrome click ".object-button"          # by class
+  chrome click "input[type=\"email\"]"   # by attribute
+  chrome click "canvas"                  # by tag
+
+Invalid (these are Playwright selectors, not CSS):
+  chrome click "button:has-text(\"Login\")"  # WRONG - use clicktext instead
+  chrome click "text=Login"                  # WRONG - use clicktext instead`
 }
 
 func click() {

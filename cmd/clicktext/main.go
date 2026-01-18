@@ -27,11 +27,16 @@ func (clickTextArgs) Description() string {
 	return `clicktext - Click an element by its visible text
 
 Finds the Nth element matching --selector whose textContent.trim() equals TEXT and clicks it.
-Defaults to buttons and links.
+Defaults to buttons and links. Use this instead of 'click' when you want to match by text.
 
 Examples:
-  chrome clicktext "Copy ASCII"
-  chrome clicktext "Map Editor" --selector "button, a" --index 0`
+  chrome clicktext "Sign In"                    # click button/link with text "Sign In"
+  chrome clicktext "Submit" --index 1           # click the second "Submit" button
+  chrome clicktext "Save" --selector "button"   # only match buttons, not links
+
+This is the correct way to click by text. Do NOT use 'click' with Playwright selectors:
+  chrome clicktext "Login"                          # CORRECT
+  chrome click "button:has-text(\"Login\")"         # WRONG - invalid CSS selector`
 }
 
 func clicktext() {

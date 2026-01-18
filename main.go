@@ -40,6 +40,15 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  1. External Chrome: Launch Chrome with --remote-debugging-port=9222 via `chrome launch`")
 	fmt.Fprintln(os.Stderr, "  2. Headless: CLI launches headless Chrome automatically")
 	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Selectors:")
+	fmt.Fprintln(os.Stderr, "  Commands that take SELECTOR use standard CSS selectors only.")
+	fmt.Fprintln(os.Stderr, "  Valid:   #id, .class, button, input[type=\"email\"], div > span")
+	fmt.Fprintln(os.Stderr, "  Invalid: :has-text(), :text(), >> (these are Playwright selectors, not CSS)")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "  To click by visible text, use 'clicktext' instead of 'click':")
+	fmt.Fprintln(os.Stderr, "    chrome clicktext \"Sign In\"     # correct - clicks button with text 'Sign In'")
+	fmt.Fprintln(os.Stderr, "    chrome click \"button#submit\"   # correct - clicks button with id 'submit'")
+	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Commands:")
 
 	var fns []string
