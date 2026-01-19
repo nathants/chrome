@@ -13,6 +13,8 @@ import (
 	"github.com/nathants/chrome/lib"
 )
 
+var errHelpRequested = errors.New("help requested")
+
 func init() {
 	lib.Commands["step"] = step
 	lib.Args["step"] = stepArgs{}
@@ -32,6 +34,8 @@ func (stepArgs) Description() string {
 Step is a wrapper that: (1) runs any chrome action, then (2) takes a screenshot.
 The --output-dir flag controls where step saves its screenshot, NOT the action.
 Actions like clicktext, type, etc. don't take screenshots themselves.
+Pass the action and its args as separate tokens (ACTION [ARGS...]).
+If ACTION contains spaces (e.g., "click #btn"), it will be split on whitespace.
 
 Examples:
   chrome step navigate https://localhost:3000
@@ -52,6 +56,17 @@ type parsedStep struct {
 func step() {
 	parsed, err := parseStep(os.Args[1:])
 	if err != nil {
+		if err == errHelpRequested {
+			fmt.Println((stepArgs{}).Description())
+			fmt.Println("\nUsage: step [OPTIONS] ACTION [ACTION_ARGS...]")
+			fmt.Println("\nOptions:")
+			fmt.Println("  -t, --target URL       URL prefix to select tab")
+			fmt.Println("  -o, --output-dir DIR   directory to store screenshots (default: ~/chrome-shots)")
+			fmt.Println("  -l, --label LABEL      label embedded in filename")
+			fmt.Println("  -n, --note NOTE        note stored with metadata")
+			fmt.Println("  -h, --help             display this help")
+			os.Exit(0)
+		}
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
@@ -62,12 +77,6 @@ func step() {
 	actionArgs := append([]string{}, parsed.actionArgs...)
 	if supportsTarget {
 		actionArgs = applyTarget(actionArgs, target)
-	}
-	actionSummary := strings.TrimSpace(strings.Join(actionArgs, " "))
-	if actionSummary != "" {
-		fmt.Printf("action: chrome %s %s\n", action, actionSummary)
-	} else {
-		fmt.Printf("action: chrome %s\n", action)
 	}
 
 	if err := runSubcommand(action, actionArgs); err != nil {
@@ -86,17 +95,7 @@ func step() {
 		os.Exit(1)
 	}
 
-	shotArgs := []string{"screenshot", "--path", path}
-	if parsed.label != "" {
-		shotArgs = append(shotArgs, "--label", parsed.label)
-	}
-	if parsed.note != "" {
-		shotArgs = append(shotArgs, "--note", parsed.note)
-	}
-	if target != "" {
-		shotArgs = append(shotArgs, "--target", target)
-	}
-	if err := runSubcommand(shotArgs[0], shotArgs[1:]); err != nil {
+	if err := lib.CaptureScreenshot(target, path); err != nil {
 		fmt.Fprintf(os.Stderr, "error capturing screenshot: %v\n", err)
 		os.Exit(1)
 	}
@@ -133,6 +132,9 @@ func parseStep(args []string) (parsedStep, error) {
 		}
 		if !strings.HasPrefix(tok, "-") {
 			break
+		}
+		if tok == "-h" || tok == "--help" {
+			return parsedStep{}, errHelpRequested
 		}
 		if strings.HasPrefix(tok, "--target=") {
 			value := strings.TrimPrefix(tok, "--target=")
@@ -214,6 +216,16 @@ func parseStep(args []string) (parsedStep, error) {
 
 	if pos < len(args) {
 		parsed.actionArgs = append(parsed.actionArgs, args[pos:]...)
+	}
+
+	if strings.ContainsAny(parsed.action, " \t") {
+		fields := strings.Fields(parsed.action)
+		if len(fields) > 0 {
+			parsed.action = fields[0]
+			if len(fields) > 1 {
+				parsed.actionArgs = append(fields[1:], parsed.actionArgs...)
+			}
+		}
 	}
 
 	return parsed, nil

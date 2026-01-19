@@ -45,7 +45,10 @@ func launchChrome() {
 	arg.MustParse(&args)
 
 	if lib.IsChromeRunning() {
-		fmt.Fprintf(os.Stderr, "Chrome is already running on port %d\n", defaultDebugPort)
+		fmt.Fprintf(os.Stderr, "Chrome already running on port %d. Use:\n", defaultDebugPort)
+		fmt.Fprintf(os.Stderr, "  chrome list                    # See open tabs\n")
+		fmt.Fprintf(os.Stderr, "  chrome newtab <url>            # Open new tab\n")
+		fmt.Fprintf(os.Stderr, "  chrome -t <url-prefix> <cmd>   # Target existing tab\n")
 		os.Exit(0)
 	}
 

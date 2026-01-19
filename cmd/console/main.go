@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/alexflint/go-arg"
+	cdplog "github.com/chromedp/cdproto/log"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 	"github.com/nathants/chrome/lib"
@@ -19,14 +21,19 @@ func init() {
 }
 
 type consoleArgs struct {
+	lib.TargetArgs
 	Duration int  `arg:"-d,--duration" default:"5" help:"duration in seconds to capture logs"`
 	Follow   bool `arg:"-f,--follow" help:"follow mode, capture logs continuously"`
+	Eval     string `arg:"--eval" help:"JavaScript to evaluate after enabling log capture"`
 }
 
 func (consoleArgs) Description() string {
 	return `console - Capture console logs
 
-Captures console.log, console.warn, console.error and exceptions from the page.
+Captures console.log, console.warn, console.error, exceptions, and browser log
+events (CSP violations, security errors, deprecation warnings, etc) from the page.
+Output is JSON, one object per line (NDJSON).
+Use --eval to run JavaScript after capture starts (handy for triggering logs).
 
 Example:
   chrome console                    # Capture for 5 seconds
@@ -59,9 +66,16 @@ func console() {
 	ctx, cancel := lib.SetupContextWithTimeout(ctxTimeout)
 	defer cancel()
 
+	targetCtx, targetCancel, err := lib.EnsureTargetContext(ctx, args.TargetArgs.Selector())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	defer targetCancel()
+
 	messages := make(chan ConsoleMessage, 100)
 
-	chromedp.ListenTarget(ctx, func(ev interface{}) {
+	chromedp.ListenTarget(targetCtx, func(ev interface{}) {
 		switch ev := ev.(type) {
 		case *runtime.EventConsoleAPICalled:
 			msg := ConsoleMessage{
@@ -75,7 +89,10 @@ func console() {
 				for _, arg := range ev.Args {
 					var val interface{}
 					if arg.Value != nil {
-						_ = json.Unmarshal(arg.Value, &val)
+						err := json.Unmarshal(arg.Value, &val)
+						if err != nil {
+							val = string(arg.Value)
+						}
 						args = append(args, val)
 					} else {
 						args = append(args, arg.Type.String())
@@ -112,19 +129,38 @@ func console() {
 			case messages <- msg:
 			default:
 			}
+		case *cdplog.EventEntryAdded:
+			// Capture Log domain events (CSP violations, security errors, etc).
+			msg := ConsoleMessage{
+				Type:      string(ev.Entry.Source),
+				Level:     string(ev.Entry.Level),
+				Message:   ev.Entry.Text,
+				Timestamp: time.Now(),
+			}
+
+			select {
+			case messages <- msg:
+			default:
+			}
 		}
 	})
 
-	if err := chromedp.Run(ctx, runtime.Enable()); err != nil {
+	if err := chromedp.Run(targetCtx, runtime.Enable(), cdplog.Enable()); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
+	}
+	if strings.TrimSpace(args.Eval) != "" {
+		err := chromedp.Run(targetCtx, chromedp.Evaluate(args.Eval, nil))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	if args.Follow {
 		for {
 			msg := <-messages
-			output, _ := json.MarshalIndent(msg, "", "  ")
-			fmt.Println(string(output))
+			lib.PrintJSONLine(msg)
 		}
 	}
 
@@ -132,8 +168,7 @@ func console() {
 	for {
 		select {
 		case msg := <-messages:
-			output, _ := json.MarshalIndent(msg, "", "  ")
-			fmt.Println(string(output))
+			lib.PrintJSONLine(msg)
 		case <-deadline:
 			return
 		}

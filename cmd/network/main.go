@@ -2,9 +2,9 @@
 package network
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/alexflint/go-arg"
@@ -19,14 +19,18 @@ func init() {
 }
 
 type networkArgs struct {
+	lib.TargetArgs
 	Duration int  `arg:"-d,--duration" default:"5" help:"duration in seconds to monitor"`
 	Follow   bool `arg:"-f,--follow" help:"follow mode, monitor continuously"`
+	Eval     string `arg:"--eval" help:"JavaScript to evaluate after enabling network capture"`
 }
 
 func (networkArgs) Description() string {
 	return `network - Monitor network requests
 
 Captures HTTP requests and responses from the page.
+Output is JSON, one object per line (NDJSON).
+Use --eval to run JavaScript after capture starts (handy for triggering requests).
 
 Example:
   chrome network                    # Monitor for 5 seconds
@@ -61,9 +65,16 @@ func networkCmd() {
 	ctx, cancel := lib.SetupContextWithTimeout(ctxTimeout)
 	defer cancel()
 
+	targetCtx, targetCancel, err := lib.EnsureTargetContext(ctx, args.TargetArgs.Selector())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	defer targetCancel()
+
 	events := make(chan NetworkEvent, 100)
 
-	chromedp.ListenTarget(ctx, func(ev interface{}) {
+	chromedp.ListenTarget(targetCtx, func(ev interface{}) {
 		switch ev := ev.(type) {
 		case *network.EventRequestWillBeSent:
 			evt := NetworkEvent{
@@ -103,16 +114,22 @@ func networkCmd() {
 		}
 	})
 
-	if err := chromedp.Run(ctx, network.Enable()); err != nil {
+	if err := chromedp.Run(targetCtx, network.Enable()); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
+	}
+	if strings.TrimSpace(args.Eval) != "" {
+		err := chromedp.Run(targetCtx, chromedp.Evaluate(args.Eval, nil))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	if args.Follow {
 		for {
 			evt := <-events
-			output, _ := json.MarshalIndent(evt, "", "  ")
-			fmt.Println(string(output))
+			lib.PrintJSONLine(evt)
 		}
 	}
 
@@ -120,8 +137,7 @@ func networkCmd() {
 	for {
 		select {
 		case evt := <-events:
-			output, _ := json.MarshalIndent(evt, "", "  ")
-			fmt.Println(string(output))
+			lib.PrintJSONLine(evt)
 		case <-deadline:
 			return
 		}

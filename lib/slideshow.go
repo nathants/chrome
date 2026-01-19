@@ -22,7 +22,6 @@ const (
 	subtitleFontSize              = 32
 )
 
-// LoadStepRecordsFromDir loads all StepRecord metadata from a directory.
 func LoadStepRecordsFromDir(dir string) ([]StepRecord, error) {
 	trimmed := strings.TrimSpace(dir)
 	if trimmed == "" {
@@ -80,8 +79,7 @@ func LoadStepRecordsFromDir(dir string) ([]StepRecord, error) {
 	return records, nil
 }
 
-// GenerateSlideshow renders an mp4 slideshow from the provided step records at the requested fps.
-func GenerateSlideshow(records []StepRecord, outputPath string, fps int) error {
+func GenerateSlideshow(records []StepRecord, outputPath string, fps int, verbose bool) error {
 	if len(records) == 0 {
 		return errors.New("no step records provided for slideshow")
 	}
@@ -139,9 +137,12 @@ func GenerateSlideshow(records []StepRecord, outputPath string, fps int) error {
 		escapeForFilter(captionsPath), subtitleFontName, subtitleFontSize))
 	filter := strings.Join(filterParts, ",")
 
-	cmd := exec.Command(
-		ffmpegPath,
-		"-y",
+	args := []string{"-y"}
+	if !verbose {
+		args = append(args, "-hide_banner", "-loglevel", "warning", "-nostats")
+	}
+	args = append(
+		args,
 		"-f", "concat",
 		"-safe", "0",
 		"-i", concatPath,
@@ -152,6 +153,7 @@ func GenerateSlideshow(records []StepRecord, outputPath string, fps int) error {
 		"-vsync", "cfr",
 		absOutput,
 	)
+	cmd := exec.Command(ffmpegPath, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 

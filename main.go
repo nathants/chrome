@@ -16,6 +16,7 @@ import (
 	_ "github.com/nathants/chrome/cmd/close"
 	_ "github.com/nathants/chrome/cmd/console"
 	_ "github.com/nathants/chrome/cmd/eval"
+	_ "github.com/nathants/chrome/cmd/fill"
 	_ "github.com/nathants/chrome/cmd/html"
 	_ "github.com/nathants/chrome/cmd/launch"
 	_ "github.com/nathants/chrome/cmd/list"
@@ -34,11 +35,22 @@ import (
 )
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "Chrome CLI - Simple CDP interface")
+	fmt.Fprintln(os.Stderr, "Chrome CLI - Browser automation for LLM agents")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Modes:")
-	fmt.Fprintln(os.Stderr, "  1. External Chrome: Launch Chrome with --remote-debugging-port=9222 via `chrome launch`")
-	fmt.Fprintln(os.Stderr, "  2. Headless: CLI launches headless Chrome automatically")
+	fmt.Fprintln(os.Stderr, "Quick Start:")
+	fmt.Fprintln(os.Stderr, "  chrome list                              # See open tabs (use this first!)")
+	fmt.Fprintln(os.Stderr, "  chrome newtab http://localhost:8000      # Open a new tab")
+	fmt.Fprintln(os.Stderr, "  chrome -t localhost:8000 click \"#btn\"    # Target tab by URL prefix")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Global Options (must appear before command):")
+	fmt.Fprintln(os.Stderr, "  -t, --target URL_PREFIX                  # Select tab by URL prefix")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Multi-Agent Usage:")
+	fmt.Fprintln(os.Stderr, "  Multiple agents share the same Chrome instance on port 9222.")
+	fmt.Fprintln(os.Stderr, "  - Run `chrome list` to see existing tabs before creating new ones")
+	fmt.Fprintln(os.Stderr, "  - Use `chrome -t URL_PREFIX <cmd>` to target your specific tab")
+	fmt.Fprintln(os.Stderr, "  - NEVER kill Chrome processes - other agents may be using them")
+	fmt.Fprintln(os.Stderr, "  - Use `chrome launch` only if `chrome list` fails (Chrome not running)")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Selectors:")
 	fmt.Fprintln(os.Stderr, "  Commands that take SELECTOR use standard CSS selectors only.")
@@ -85,26 +97,62 @@ func usage() {
 		line = strings.ReplaceAll(line, "Usage: chrome", "")
 		fmt.Fprintf(os.Stderr, fmtStr, fn, line)
 	}
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Note: For multi-step automation, use external Chrome on port 9222 to maintain state between commands.")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Workflow tip: 'chrome step <action>' wraps any action with a screenshot.")
-	fmt.Fprintln(os.Stderr, "  Step runs the action, then takes its own screenshot. Flags like --output-dir")
-	fmt.Fprintln(os.Stderr, "  control where step saves its screenshot, not the action itself.")
 }
 
 func main() {
-	if len(os.Args) < 2 || os.Args[1] == "-h" || os.Args[1] == "--help" {
+	if len(os.Args) < 2 {
 		usage()
 		os.Exit(1)
 	}
-	cmd := os.Args[1]
+
+	args := append([]string{}, os.Args[1:]...)
+	target := ""
+	for len(args) > 0 {
+		arg := args[0]
+		if arg == "-h" || arg == "--help" {
+			usage()
+			os.Exit(0)
+		}
+		if arg == "-t" || arg == "--target" {
+			if len(args) < 2 {
+				fmt.Fprintln(os.Stderr, "error: --target requires a value")
+				os.Exit(1)
+			}
+			target = args[1]
+			args = args[2:]
+			continue
+		}
+		if strings.HasPrefix(arg, "--target=") {
+			target = strings.TrimPrefix(arg, "--target=")
+			args = args[1:]
+			continue
+		}
+		if strings.HasPrefix(arg, "-t=") {
+			target = strings.TrimPrefix(arg, "-t=")
+			args = args[1:]
+			continue
+		}
+		break
+	}
+	if len(args) == 0 {
+		usage()
+		os.Exit(1)
+	}
+	if strings.TrimSpace(target) != "" {
+		err := os.Setenv("CHROME_TARGET", target)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	cmd := args[0]
 	fn, ok := lib.Commands[cmd]
 	if !ok {
 		usage()
 		fmt.Fprintln(os.Stderr, "\nunknown command:", cmd)
 		os.Exit(1)
 	}
-	os.Args = os.Args[1:]
+	os.Args = args
 	fn()
 }

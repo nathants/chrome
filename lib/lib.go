@@ -68,7 +68,6 @@ type TargetArgs struct {
 	Target string `arg:"-t,--target" help:"URL prefix to select tab (first match wins)"`
 }
 
-// Selector returns the trimmed target string for resolution
 func (t TargetArgs) Selector() string {
 	return strings.TrimSpace(t.Target)
 }
@@ -83,7 +82,6 @@ func SetupContext() (context.Context, context.CancelFunc) {
 	return SetupContextWithTimeout(DefaultTimeout)
 }
 
-// SetupContextWithTimeout creates a chromedp context.
 // If timeout <= 0, the context has no deadline (caller must cancel).
 func SetupContextWithTimeout(timeout time.Duration) (context.Context, context.CancelFunc) {
 	var (
@@ -265,11 +263,22 @@ func matchTargetBySelector(pages []ChromeTarget, selector string) string {
 		return ""
 	}
 
-	// Match by URL prefix (case-insensitive), return first match
 	selectorLower := strings.ToLower(selector)
+
+	// Direct prefix match first (case-insensitive)
 	for _, t := range pages {
 		if strings.HasPrefix(strings.ToLower(t.URL), selectorLower) {
 			return t.ID
+		}
+	}
+
+	// If selector doesn't have protocol, try with http:// and https://
+	if !strings.HasPrefix(selectorLower, "http://") && !strings.HasPrefix(selectorLower, "https://") {
+		for _, t := range pages {
+			urlLower := strings.ToLower(t.URL)
+			if strings.HasPrefix(urlLower, "http://"+selectorLower) || strings.HasPrefix(urlLower, "https://"+selectorLower) {
+				return t.ID
+			}
 		}
 	}
 
@@ -428,4 +437,15 @@ func EnsureTargetContext(ctx context.Context, selector string) (context.Context,
 
 	tabCtx, _ := chromedp.NewContext(ctx, chromedp.WithTargetID(target.ID(id)))
 	return tabCtx, func() {}, nil
+}
+
+// PrintJSONLine marshals value to JSON and prints it as a single line (NDJSON format).
+// Exits with code 1 on marshal error.
+func PrintJSONLine(value any) {
+	output, err := json.Marshal(value)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println(string(output))
 }

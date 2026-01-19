@@ -21,6 +21,7 @@ type args struct {
 	ShotsDir string `arg:"-d,--shots-dir" help:"directory containing screenshots and metadata (default: ~/chrome-shots)"`
 	Output   string `arg:"-o,--output" help:"output mp4 path (default: <shots-dir>/slideshow-<timestamp>.mp4)"`
 	FPS      int    `arg:"-f,--fps" help:"frames per second for output video (default: 30)"`
+	Verbose  bool   `arg:"--verbose" help:"show ffmpeg banner and progress output"`
 }
 
 func (args) Description() string {
@@ -30,7 +31,8 @@ Examples:
   chrome slideshow
   chrome slideshow --shots-dir /tmp/run
   chrome slideshow --output /tmp/slideshow.mp4
-  chrome slideshow --fps 30`
+  chrome slideshow --fps 30
+  chrome slideshow --verbose`
 }
 
 func run() {
@@ -62,7 +64,7 @@ func run() {
 		fps = 30
 	}
 
-	err = lib.GenerateSlideshow(records, output, fps)
+	err = lib.GenerateSlideshow(records, output, fps, parsed.Verbose)
 	if err != nil {
 		var pathErr *os.PathError
 		if errors.As(err, &pathErr) {

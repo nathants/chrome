@@ -28,12 +28,9 @@ type StepRecord struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
-// MetadataPath returns the json metadata path associated with a screenshot record.
 func (record StepRecord) MetadataPath() string {
 	return record.Screenshot + ".json"
 }
-
-// CaptureScreenshot captures a screenshot for the selector into path.
 
 func CaptureScreenshot(selector string, path string) error {
 	absPath, err := filepath.Abs(path)
@@ -157,7 +154,6 @@ func captureScreenshotRemote(selector string, path string) error {
 	}
 }
 
-// DefaultShotsDir returns the default directory for storing screenshots.
 func DefaultShotsDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -166,7 +162,6 @@ func DefaultShotsDir() string {
 	return filepath.Join(home, "chrome-shots")
 }
 
-// PrepareShotsDir resolves dir to an absolute path and ensures it exists.
 func PrepareShotsDir(dir string) (string, error) {
 	targetDir := strings.TrimSpace(dir)
 	if targetDir == "" {
@@ -183,7 +178,6 @@ func PrepareShotsDir(dir string) (string, error) {
 	return absDir, nil
 }
 
-// PrepareScreenshotPath decides the output path for a screenshot.
 func PrepareScreenshotPath(path string, dir string, label string) (string, error) {
 	trimmed := strings.TrimSpace(path)
 	if trimmed != "" {
@@ -224,7 +218,6 @@ func sanitizeLabel(label string) string {
 	return compact
 }
 
-// SaveStepRecord writes metadata next to the screenshot.
 func SaveStepRecord(record StepRecord) error {
 	if record.CreatedAt.IsZero() {
 		record.CreatedAt = time.Now().UTC()
@@ -237,7 +230,6 @@ func SaveStepRecord(record StepRecord) error {
 	return os.WriteFile(record.MetadataPath(), data, 0644)
 }
 
-// SaveLastStep persists the most recent step record for quick retrieval.
 func SaveLastStep(record StepRecord) error {
 	cache, err := cacheDir()
 	if err != nil {
@@ -251,7 +243,6 @@ func SaveLastStep(record StepRecord) error {
 	return os.WriteFile(path, data, 0644)
 }
 
-// LoadLastStep loads the most recent step record.
 func LoadLastStep() (StepRecord, error) {
 	cache, err := cacheDir()
 	if err != nil {
@@ -270,7 +261,6 @@ func LoadLastStep() (StepRecord, error) {
 	return record, nil
 }
 
-// LoadStepMetadata loads metadata for a screenshot path if available.
 func LoadStepMetadata(path string) (StepRecord, error) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
@@ -295,7 +285,6 @@ func LoadStepMetadata(path string) (StepRecord, error) {
 	return record, nil
 }
 
-// RememberStep saves metadata alongside screenshot and updates cache pointer.
 func RememberStep(record StepRecord) error {
 	if record.CreatedAt.IsZero() {
 		record.CreatedAt = time.Now().UTC()
@@ -307,9 +296,7 @@ func RememberStep(record StepRecord) error {
 	return SaveLastStep(record)
 }
 
-// cacheDir returns the cache directory for storing step metadata pointers.
-// Used by SaveLastStep/LoadLastStep to track the most recent step.
-// Location: $XDG_CACHE_HOME/chrome-cli or ~/.cache/chrome-cli
+// cacheDir returns the cache directory ($XDG_CACHE_HOME/chrome-cli or ~/.cache/chrome-cli).
 func cacheDir() (string, error) {
 	cache, err := os.UserCacheDir()
 	if err != nil {
@@ -327,7 +314,6 @@ func cacheDir() (string, error) {
 	return cache, nil
 }
 
-// StepSummary returns a single-line summary for logging.
 func StepSummary(record StepRecord) string {
 	rel := record.Screenshot
 	cwd, err := os.Getwd()

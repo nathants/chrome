@@ -1,12 +1,1 @@
 /chrome
-
-# Nina/Codex harness artifacts
-.runs/
-CONTINUE.md
-DOUBT.md
-SUGGEST.md
-TASK.md
-TODO.md
-
-# Local-only notes
-.publickeys
