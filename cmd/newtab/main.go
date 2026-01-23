@@ -36,14 +36,14 @@ func newtab() {
 	arg.MustParse(&args)
 
 	if !lib.IsChromeRunning() {
-		fmt.Fprintln(os.Stderr, "Chrome not running on port 9222")
+		fmt.Fprintf(os.Stderr, "Chrome not running on port %d\n", lib.GetPort())
 		os.Exit(1)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), lib.DefaultTimeout)
 	defer cancel()
 
-	allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, lib.ChromeURL)
+	allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, lib.ChromeURL())
 	defer allocCancel()
 
 	// Create new context - this will create a new tab on first Run

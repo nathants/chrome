@@ -32,6 +32,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -41,8 +43,122 @@ import (
 
 const (
 	DefaultTimeout = 30 * time.Second
-	ChromeURL      = "http://localhost:9222"
+	DefaultPort    = 9222
 )
+
+// GetPort returns the Chrome debug port from CHROME_PORT env var or default 9222
+func GetPort() int {
+	if portStr := strings.TrimSpace(os.Getenv("CHROME_PORT")); portStr != "" {
+		port, err := strconv.Atoi(portStr)
+		if err == nil && port > 0 && port < 65536 {
+			return port
+		}
+	}
+	return DefaultPort
+}
+
+// ChromeURL returns the Chrome debug URL for the current port
+func ChromeURL() string {
+	return fmt.Sprintf("http://localhost:%d", GetPort())
+}
+
+// IsChromeRunningOnPort checks if Chrome is running on a specific port
+func IsChromeRunningOnPort(port int) bool {
+	url := fmt.Sprintf("http://localhost:%d/json/version", port)
+	resp, err := cdpHTTPClient.Get(url)
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
+// InstanceInfo holds metadata about a running Chrome instance
+type InstanceInfo struct {
+	Port        int    `json:"port"`
+	UserDataDir string `json:"user_data_dir"`
+	PID         int    `json:"pid,omitempty"`
+	StartedAt   string `json:"started_at"`
+}
+
+// InstanceMetadataDir returns the directory for instance metadata files
+func InstanceMetadataDir() string {
+	return filepath.Join(os.TempDir(), "chrome-instances")
+}
+
+// InstanceMetadataPath returns the path for a specific port's metadata file
+func InstanceMetadataPath(port int) string {
+	return filepath.Join(InstanceMetadataDir(), fmt.Sprintf("%d.json", port))
+}
+
+// WriteInstanceMetadata writes instance info to the metadata file
+func WriteInstanceMetadata(info InstanceInfo) error {
+	dir := InstanceMetadataDir()
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	data, err := json.Marshal(info)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(InstanceMetadataPath(info.Port), data, 0644)
+}
+
+// ReadInstanceMetadata reads instance info from the metadata file
+func ReadInstanceMetadata(port int) (*InstanceInfo, error) {
+	data, err := os.ReadFile(InstanceMetadataPath(port))
+	if err != nil {
+		return nil, err
+	}
+	var info InstanceInfo
+	if err := json.Unmarshal(data, &info); err != nil {
+		return nil, err
+	}
+	return &info, nil
+}
+
+// RemoveInstanceMetadata removes the metadata file for a port
+func RemoveInstanceMetadata(port int) error {
+	return os.Remove(InstanceMetadataPath(port))
+}
+
+// ListInstances returns all running Chrome instances with their metadata
+func ListInstances() ([]InstanceInfo, error) {
+	dir := InstanceMetadataDir()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var instances []InstanceInfo
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		portStr := strings.TrimSuffix(entry.Name(), ".json")
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			continue
+		}
+
+		// Check if instance is still running
+		if !IsChromeRunningOnPort(port) {
+			// Clean up stale metadata
+			_ = RemoveInstanceMetadata(port)
+			continue
+		}
+
+		info, err := ReadInstanceMetadata(port)
+		if err != nil {
+			continue
+		}
+		instances = append(instances, *info)
+	}
+	return instances, nil
+}
 
 var cdpHTTPClient = &http.Client{Timeout: 5 * time.Second}
 
@@ -95,7 +211,7 @@ func SetupContextWithTimeout(timeout time.Duration) (context.Context, context.Ca
 	}
 
 	if IsChromeRunning() {
-		allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, ChromeURL)
+		allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, ChromeURL())
 
 		targetID, _, _ := ResolveTarget("", nil)
 
@@ -136,7 +252,7 @@ func SetupContextWithTimeout(timeout time.Duration) (context.Context, context.Ca
 }
 
 func IsChromeRunning() bool {
-	resp, err := cdpHTTPClient.Get(ChromeURL + "/json/version")
+	resp, err := cdpHTTPClient.Get(ChromeURL() + "/json/version")
 	if err != nil {
 		return false
 	}
@@ -145,7 +261,7 @@ func IsChromeRunning() bool {
 }
 
 func FetchTargets() ([]ChromeTarget, error) {
-	resp, err := cdpHTTPClient.Get(ChromeURL + "/json/list")
+	resp, err := cdpHTTPClient.Get(ChromeURL() + "/json/list")
 	if err != nil {
 		return nil, err
 	}
@@ -325,7 +441,7 @@ func fetchTargetInfos() ([]*target.Info, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, ChromeURL)
+	allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, ChromeURL())
 	defer allocCancel()
 
 	ctx2, cancel2 := chromedp.NewContext(allocCtx)
@@ -347,9 +463,12 @@ func shortID(id string) string {
 }
 
 func ListTabs() error {
+	port := GetPort()
 	if !IsChromeRunning() {
-		return fmt.Errorf("Chrome not running on port 9222")
+		return fmt.Errorf("Chrome not running on port %d", port)
 	}
+
+	fmt.Printf("Port: %d\n\n", port)
 
 	targets, err := FetchTargets()
 	if err != nil {
@@ -416,7 +535,7 @@ func EnsureTargetContext(ctx context.Context, selector string) (context.Context,
 	}
 
 	if !IsChromeRunning() {
-		return nil, nil, fmt.Errorf("target selection requires Chrome on %s", ChromeURL)
+		return nil, nil, fmt.Errorf("target selection requires Chrome on %s", ChromeURL())
 	}
 
 	id, reason, err := ResolveTarget(sel, nil)

@@ -7,6 +7,7 @@ import (
 	"os"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/alexflint/go-arg"
@@ -18,6 +19,7 @@ import (
 	_ "github.com/nathants/chrome/cmd/eval"
 	_ "github.com/nathants/chrome/cmd/fill"
 	_ "github.com/nathants/chrome/cmd/html"
+	_ "github.com/nathants/chrome/cmd/instances"
 	_ "github.com/nathants/chrome/cmd/launch"
 	_ "github.com/nathants/chrome/cmd/list"
 	_ "github.com/nathants/chrome/cmd/navigate"
@@ -43,14 +45,13 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  chrome -t localhost:8000 click \"#btn\"    # Target tab by URL prefix")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Global Options (must appear before command):")
-	fmt.Fprintln(os.Stderr, "  -t, --target URL_PREFIX                  # Select tab by URL prefix")
+	fmt.Fprintln(os.Stderr, "  -p, --port PORT                          # Chrome debug port (default: 9222, env: CHROME_PORT)")
+	fmt.Fprintln(os.Stderr, "  -t, --target URL_PREFIX                  # Select tab by URL prefix (env: CHROME_TARGET)")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Multi-Agent Usage:")
-	fmt.Fprintln(os.Stderr, "  Multiple agents share the same Chrome instance on port 9222.")
-	fmt.Fprintln(os.Stderr, "  - Run `chrome list` to see existing tabs before creating new ones")
-	fmt.Fprintln(os.Stderr, "  - Use `chrome -t URL_PREFIX <cmd>` to target your specific tab")
-	fmt.Fprintln(os.Stderr, "  - NEVER kill Chrome processes - other agents may be using them")
-	fmt.Fprintln(os.Stderr, "  - Use `chrome launch` only if `chrome list` fails (Chrome not running)")
+	fmt.Fprintln(os.Stderr, "Multi-Instance Usage:")
+	fmt.Fprintln(os.Stderr, "  chrome launch --port 9223 --user-data-dir ~/.chrome-twitter")
+	fmt.Fprintln(os.Stderr, "  chrome -p 9223 newtab https://x.com      # Use different port")
+	fmt.Fprintln(os.Stderr, "  chrome instances                         # List running Chrome instances")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Selectors:")
 	fmt.Fprintln(os.Stderr, "  Commands that take SELECTOR use standard CSS selectors only.")
@@ -107,11 +108,31 @@ func main() {
 
 	args := append([]string{}, os.Args[1:]...)
 	target := ""
+	port := ""
 	for len(args) > 0 {
 		arg := args[0]
 		if arg == "-h" || arg == "--help" {
 			usage()
 			os.Exit(0)
+		}
+		if arg == "-p" || arg == "--port" {
+			if len(args) < 2 {
+				fmt.Fprintln(os.Stderr, "error: --port requires a value")
+				os.Exit(1)
+			}
+			port = args[1]
+			args = args[2:]
+			continue
+		}
+		if strings.HasPrefix(arg, "--port=") {
+			port = strings.TrimPrefix(arg, "--port=")
+			args = args[1:]
+			continue
+		}
+		if strings.HasPrefix(arg, "-p=") {
+			port = strings.TrimPrefix(arg, "-p=")
+			args = args[1:]
+			continue
 		}
 		if arg == "-t" || arg == "--target" {
 			if len(args) < 2 {
@@ -137,6 +158,19 @@ func main() {
 	if len(args) == 0 {
 		usage()
 		os.Exit(1)
+	}
+	if strings.TrimSpace(port) != "" {
+		// Validate port is a number in valid range
+		p, err := strconv.Atoi(port)
+		if err != nil || p <= 0 || p >= 65536 {
+			fmt.Fprintf(os.Stderr, "error: invalid port: %s (must be 1-65535)\n", port)
+			os.Exit(1)
+		}
+		err = os.Setenv("CHROME_PORT", port)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
 	}
 	if strings.TrimSpace(target) != "" {
 		err := os.Setenv("CHROME_TARGET", target)

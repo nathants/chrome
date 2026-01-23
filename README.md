@@ -48,6 +48,7 @@ chrome screenshot --path /tmp/shot.png
 | Command | Description |
 |---------|-------------|
 | `launch` | Launch Chrome with remote debugging |
+| `instances` | List running Chrome instances |
 | `navigate` | Navigate to a URL |
 | `newtab` | Create a new tab |
 | `close` | Close a tab |
@@ -92,6 +93,30 @@ Or set the `CHROME_TARGET` environment variable:
 export CHROME_TARGET=http://localhost:3000
 chrome click "button.submit"
 ```
+
+## Multiple Instances
+
+Run multiple Chrome instances simultaneously with different profiles on different ports:
+
+```bash
+# Launch instances on different ports with different profiles
+chrome launch                                                 # Port 9222, default profile
+chrome launch --port 9223 --user-data-dir ~/.chrome-twitter   # Port 9223, Twitter profile
+chrome launch --port 9224 --user-data-dir ~/.chrome-github    # Port 9224, GitHub profile
+
+# List running instances
+chrome instances
+
+# Target a specific instance with -p flag
+chrome -p 9223 newtab https://x.com
+chrome -p 9223 list
+
+# Or use environment variable
+export CHROME_PORT=9223
+chrome list
+```
+
+Each instance has its own profile directory for persistent cookies/auth.
 
 ## Workflow: Step-by-Step Automation
 
@@ -205,6 +230,7 @@ cat /tmp/console.log
 
 | Variable | Description |
 |----------|-------------|
+| `CHROME_PORT` | Chrome debug port (default: 9222) |
 | `CHROME_TARGET` | Default tab URL prefix for targeting |
 | `CHROME_PATH` | Path to Chrome executable |
 

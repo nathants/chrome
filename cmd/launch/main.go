@@ -22,33 +22,56 @@ func init() {
 }
 
 type launchArgs struct {
-	LogFile     string `arg:"--log-file" help:"Log file for Chrome output (default: <tmp>/chrome-launch.log)"`
+	Port        int    `arg:"-p,--port" default:"9222" help:"Debug port (default: 9222)"`
 	UserDataDir string `arg:"--user-data-dir" help:"Chrome user data dir (default: ~/.chrome on Unix, C:\\temp\\chrome on WSL)"`
 }
 
 func (launchArgs) Description() string {
 	return `launch - Launch Chrome with remote debugging
 
-Launches Chrome with remote debugging enabled on port 9222.
+Launches Chrome with remote debugging enabled.
 
 Security: remote debugging grants full control of Chrome. This command binds the
 debugging endpoint to localhost only.
 
+Profiles: Use --user-data-dir to persist cookies/auth across sessions. The profile
+directory stores cookies, localStorage, and other browser state.
+
+Multiple Instances: Use --port to run multiple Chrome instances simultaneously,
+each with its own profile. Use 'chrome instances' to list running instances.
+
+Defaults:
+  Port:        9222
+  Linux/macOS: ~/.chrome
+  WSL:         C:\temp\chrome
+
+Logs: Written to <tmp>/chrome-launch-<profile>.log based on profile directory name.
+  Linux/macOS: /tmp/chrome-launch-chrome.log (default profile)
+               /tmp/chrome-launch-myprofile.log (--user-data-dir ~/.chrome-myprofile)
+  WSL:         /tmp/chrome-launch-chrome.log (default profile)
+               /tmp/chrome-launch-myprofile.log (--user-data-dir C:\temp\chrome-myprofile)
+
+WSL Note: On WSL, Chrome runs on Windows, so --user-data-dir must be a Windows path.
+  Correct: C:\temp\chrome-myprofile
+  Wrong:   ~/.chrome-myprofile (Linux paths don't work)
+
 Example:
   chrome launch
-  chrome launch --log-file /tmp/chrome.log
-  chrome launch --user-data-dir ~/.chrome`
+  chrome launch --port 9223 --user-data-dir ~/.chrome-twitter
+  chrome launch --user-data-dir ~/.chrome-myprofile           # Linux/macOS
+  chrome launch --user-data-dir 'C:\temp\chrome-myprofile'    # WSL`
 }
 
 func launchChrome() {
 	var args launchArgs
 	arg.MustParse(&args)
 
-	if lib.IsChromeRunning() {
-		fmt.Fprintf(os.Stderr, "Chrome already running on port %d. Use:\n", defaultDebugPort)
-		fmt.Fprintf(os.Stderr, "  chrome list                    # See open tabs\n")
-		fmt.Fprintf(os.Stderr, "  chrome newtab <url>            # Open new tab\n")
-		fmt.Fprintf(os.Stderr, "  chrome -t <url-prefix> <cmd>   # Target existing tab\n")
+	port := args.Port
+	if lib.IsChromeRunningOnPort(port) {
+		fmt.Fprintf(os.Stderr, "Chrome already running on port %d. Use:\n", port)
+		fmt.Fprintf(os.Stderr, "  chrome -p %d list              # See open tabs\n", port)
+		fmt.Fprintf(os.Stderr, "  chrome -p %d newtab <url>      # Open new tab\n", port)
+		fmt.Fprintf(os.Stderr, "  chrome -p %d -t <url> <cmd>    # Target existing tab\n", port)
 		os.Exit(0)
 	}
 
@@ -63,12 +86,15 @@ func launchChrome() {
 		userDataDir = getUserDataDir()
 	}
 
-	logFile := strings.TrimSpace(args.LogFile)
-	if logFile == "" {
-		logFile = filepath.Join(os.TempDir(), "chrome-launch.log")
+	// Log file is derived from user data dir name
+	profileName := filepath.Base(userDataDir)
+	// Handle Windows paths on WSL (e.g., C:\temp\chrome-myprofile -> chrome-myprofile)
+	if idx := strings.LastIndex(profileName, "\\"); idx >= 0 {
+		profileName = profileName[idx+1:]
 	}
+	logFile := filepath.Join(os.TempDir(), fmt.Sprintf("chrome-launch-%s.log", profileName))
 
-	fmt.Printf("Launching Chrome on port %d...\n", defaultDebugPort)
+	fmt.Printf("Launching Chrome on port %d...\n", port)
 	fmt.Printf("Chrome path: %s\n", chromePath)
 	fmt.Printf("User data: %s\n", userDataDir)
 	fmt.Printf("Logs: %s\n", logFile)
@@ -81,7 +107,7 @@ func launchChrome() {
 	defer func() { _ = lf.Close() }()
 
 	chromeArgs := []string{
-		fmt.Sprintf("--remote-debugging-port=%d", defaultDebugPort),
+		fmt.Sprintf("--remote-debugging-port=%d", port),
 		"--remote-debugging-address=127.0.0.1",
 		fmt.Sprintf("--user-data-dir=%s", userDataDir),
 		"--no-first-run",
@@ -96,7 +122,10 @@ func launchChrome() {
 		fmt.Fprintf(os.Stderr, "error launching Chrome: %v\n", err)
 		os.Exit(1)
 	}
+
+	pid := 0
 	if cmd.Process != nil {
+		pid = cmd.Process.Pid
 		_ = cmd.Process.Release()
 	}
 
@@ -104,9 +133,20 @@ func launchChrome() {
 	for i := 0; i < 10; i++ {
 		time.Sleep(500 * time.Millisecond)
 		fmt.Print(".")
-		if lib.IsChromeRunning() {
+		if lib.IsChromeRunningOnPort(port) {
 			fmt.Println()
-			fmt.Printf("Chrome is running on port %d\n", defaultDebugPort)
+			fmt.Printf("Chrome is running on port %d\n", port)
+
+			// Write instance metadata
+			info := lib.InstanceInfo{
+				Port:        port,
+				UserDataDir: userDataDir,
+				PID:         pid,
+				StartedAt:   time.Now().Format(time.RFC3339),
+			}
+			if err := lib.WriteInstanceMetadata(info); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: failed to write instance metadata: %v\n", err)
+			}
 			return
 		}
 	}

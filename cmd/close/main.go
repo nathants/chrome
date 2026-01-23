@@ -35,7 +35,7 @@ func closeTab() {
 	arg.MustParse(&args)
 
 	if !lib.IsChromeRunning() {
-		fmt.Fprintf(os.Stderr, "error: Chrome not running on port 9222\n")
+		fmt.Fprintf(os.Stderr, "error: Chrome not running on port %d\n", lib.GetPort())
 		os.Exit(1)
 	}
 
@@ -50,7 +50,7 @@ func closeTab() {
 	}
 
 	// Close tab via HTTP endpoint (simpler than chromedp context)
-	url := fmt.Sprintf("http://localhost:9222/json/close/%s", targetID)
+	url := fmt.Sprintf("%s/json/close/%s", lib.ChromeURL(), targetID)
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
