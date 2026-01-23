@@ -25,6 +25,7 @@ import (
 	_ "github.com/nathants/chrome/cmd/navigate"
 	_ "github.com/nathants/chrome/cmd/network"
 	_ "github.com/nathants/chrome/cmd/newtab"
+	_ "github.com/nathants/chrome/cmd/quit"
 	_ "github.com/nathants/chrome/cmd/rect"
 	_ "github.com/nathants/chrome/cmd/screenshot"
 	_ "github.com/nathants/chrome/cmd/slideshow"
@@ -52,6 +53,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  chrome launch --port 9223 --user-data-dir ~/.chrome-twitter")
 	fmt.Fprintln(os.Stderr, "  chrome -p 9223 newtab https://x.com      # Use different port")
 	fmt.Fprintln(os.Stderr, "  chrome instances                         # List running Chrome instances")
+	fmt.Fprintln(os.Stderr, "  chrome -p 9223 quit                      # Quit Chrome on port 9223")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Selectors:")
 	fmt.Fprintln(os.Stderr, "  Commands that take SELECTOR use standard CSS selectors only.")
