@@ -9,6 +9,7 @@
 //
 // TARGET RESOLUTION:
 // - Empty selector: Uses first available page tab (non chrome://)
+// - Tab ID prefix: Selects tab by ID (shown in brackets by `chrome list`)
 // - URL prefix: Selects first tab whose URL starts with the given prefix (case-insensitive)
 // - CHROME_TARGET env var: Used when -t flag is empty
 //
@@ -181,7 +182,7 @@ type ChromeTarget struct {
 // Embed this in command arg structs to enable tab targeting
 // Example: type myArgs struct { lib.TargetArgs; MyField string }
 type TargetArgs struct {
-	Target string `arg:"-t,--target" help:"URL prefix to select tab (first match wins)"`
+	Target string `arg:"-t,--target" help:"Tab ID prefix or URL prefix to select tab (first match wins)"`
 }
 
 func (t TargetArgs) Selector() string {
@@ -380,8 +381,17 @@ func matchTargetBySelector(pages []ChromeTarget, selector string) string {
 	}
 
 	selectorLower := strings.ToLower(selector)
+	selectorUpper := strings.ToUpper(selector)
 
-	// Direct prefix match first (case-insensitive)
+	// Match by tab ID or ID prefix first (IDs shown by `chrome list` are uppercase hex)
+	// This allows targeting specific tabs when multiple have the same URL
+	for _, t := range pages {
+		if strings.HasPrefix(strings.ToUpper(t.ID), selectorUpper) {
+			return t.ID
+		}
+	}
+
+	// Direct URL prefix match (case-insensitive)
 	for _, t := range pages {
 		if strings.HasPrefix(strings.ToLower(t.URL), selectorLower) {
 			return t.ID
